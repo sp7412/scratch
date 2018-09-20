@@ -4,7 +4,6 @@ import collections
 
 # Option 1: Create a dictionary {'num','count'}
 #           using a list comprehension
-
 def answer1(data, n):
 
    # make a dictionary where the keys are the numbers
