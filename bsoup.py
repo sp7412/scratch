@@ -10,9 +10,23 @@ soup = BeautifulSoup(content, 'html.parser')
 
 import pdb; pdb.set_trace()
 
-stdevValue = float(soup.find("span",{"data-reactid":"124","class":"W(39%) Fl(start)"}).text)
-stdevCat = float(soup.find("span",{"data-reactid":"125","class":"W(57%) Mend(5px) Fl(end)"}).text)
 
-print stdevValue, stdevCat
+std_span = next(x for x in soup.find_all('span') if x.text == "Standard Deviation")
+parent_div = std_span.parent
+for sibling in parent_div.next_siblings:
+  for child in sibling.children:
+     # do something
+     print(child.text)
+
+
+std = soup.find("span", {"data-reactid" : "121"}).text
+print std
+
+
+print float(soup.find(class_="W(57%) Mend(5px) Fl(end)").text)
+print float(soup.find("span",{"data-reactid":"124"}).text)
+print float(soup.find("span",{"data-reactid":"125"}).text)
+
+
 
 
