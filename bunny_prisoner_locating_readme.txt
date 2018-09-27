@@ -58,3 +58,25 @@ Notes
 (2,3)   8
 (1,4)   7
 (5,10) 96
+
+|16
+|11 17 24 32 41 
+| 7 12 18 25 31
+| 4  8 13 19 26 
+| 2  5  9 14 20
+| 1  3  6 10 15
+
+def answer(x, y):
+    cell_id = 0
+    for i in range(x):
+        cell_id += (i + 1)
+        for j in range(y):
+            cell_id += j
+    return cell_id
+https://programmium.wordpress.com/2017/06/08/solving-foo-bars-my-experience/
+def answer(x, y):
+  z = ((x+y-1)*(x+y-2))/2 + x
+  return str(z);
+
+https://codereview.stackexchange.com/questions/200535/finding-the-position-in-a-triangle-for-the-given-challenge
+

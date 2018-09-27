@@ -2,32 +2,10 @@
 
 import fix_yahoo_finance as yf
 yf.pdr_override()
-from pandas_datareader import data as pdr
 
-from bs4 import BeautifulSoup
-import requests
-#import pandas.io.data as web
 import datetime
 import dateutil
-import xlsxwriter
-import numpy
-import argparse
-import codecs
-import sys
-import time
-import urllib
-
-# email packages: http://kutuma.blogspot.com/2007/08/sending-emails-via-gmail-with-python.html
-import smtplib
-from email.MIMEMultipart import MIMEMultipart
-from email.MIMEBase import MIMEBase
-from email.MIMEText import MIMEText
-from email import Encoders
-import os
-# # # # # # # # # # # #
-import pprint as pp
 import matplotlib.pylab as plt
-
 
 def calcMomentum(stockTicker,startDate,totalDays):
    # get 3 years ago
@@ -74,8 +52,7 @@ def calcMomentum(stockTicker,startDate,totalDays):
       closeValue_month_12 = stockData.ix[closestDate]['Adj Close']
       perf_12_month =  (closeCurrDay - closeValue_month_12)/closeValue_month_12*100
    
-      #%% Momentum
-      momentumScore[n] = perf_3_month + perf_6_month + perf_12_month
+      momentumScore[n] = perf_1_month + perf_3_month + perf_6_month + perf_12_month
 
    return momentumScore
 
