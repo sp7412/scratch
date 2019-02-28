@@ -1,0 +1,397 @@
+#!/usr/bin/python
+
+import pdb, traceback, sys 
+
+import fix_yahoo_finance as yf
+yf.pdr_override()
+from pandas_datareader import data as pdr
+
+from bs4 import BeautifulSoup
+import requests
+#import pandas.io.data as web
+import datetime
+import dateutil
+import xlsxwriter
+import numpy
+import argparse
+import codecs
+import sys
+import time
+import urllib
+
+# email packages: http://kutuma.blogspot.com/2007/08/sending-emails-via-gmail-with-python.html
+import smtplib
+from email.MIMEMultipart import MIMEMultipart
+from email.MIMEBase import MIMEBase
+from email.MIMEText import MIMEText
+from email import Encoders
+import os
+# # # # # # # # # # # #
+
+
+def stockMachine():
+
+    parser = argparse.ArgumentParser(description='Input a date to calculate on: MMDDYY')
+    parser.add_argument("calcDate", help="Calculates portfolio info",
+                        type=int, nargs='?')
+    parser.add_argument('-e', action='store_true', default=False,
+                    dest='sendEmail',
+                    help='Send and Email to select recipients')
+
+    parser.add_argument('-l', nargs='?',
+                    help='store desired email text document')
+
+
+    args = parser.parse_args()
+
+    print args
+#    sys.exit()
+
+    # get the date from the command line:
+    if args.calcDate:
+        year = numpy.mod(args.calcDate,100)
+        month = args.calcDate/10000
+        day = numpy.mod(args.calcDate,10000)/100
+        calcDate = datetime.datetime(2000+year,month,day)
+        titleDay = calcDate.strftime("%y%m%d")
+    # if the date is not provided, default to today (not modified for weekend/holiday)
+    else:
+        calcDate = datetime.datetime.today()
+        titleDay = calcDate.strftime("%y%m%d")
+
+    #%% Get our dates correct
+    # get today's date
+    #today = datetime.datetime.today()
+
+    # get first day of year
+    first_day = datetime.datetime(calcDate.year, 1, 1)
+
+    # get X month ago
+    month_1 = calcDate + dateutil.relativedelta.relativedelta(months=-1)
+    month_3 = calcDate + dateutil.relativedelta.relativedelta(months=-3)
+    month_6 = calcDate + dateutil.relativedelta.relativedelta(months=-6)
+    month_12 = calcDate + dateutil.relativedelta.relativedelta(months=-12)
+
+    # get 3 years ago
+    year_3 = calcDate + dateutil.relativedelta.relativedelta(months=-36)
+
+    # load in the list of stocks
+    #stock_tickers = ['EXEYX','HDPMX','FBIOX','FSPHX','RYOIX','MFOCX','QQQ','JSVAX','OAKLX']
+
+    tickerFile = './tickerList_long.txt'
+    with codecs.open(tickerFile, encoding='utf-8') as fileTicker:
+        tickers = fileTicker.readlines()
+
+    #%%
+    # Create an new Excel file and add a worksheet.
+    # from https://xlsxwriter.readthedocs.org/example_datetimes.html
+    workbookName = 'stockMachine_' + titleDay + '.xlsx'
+    # workbookName = 'stockMachine.xlsx'
+    # print workbookName
+    workbook = xlsxwriter.Workbook(workbookName)
+    worksheet = workbook.add_worksheet()
+
+    column = 0
+    row = 0
+
+    # print the calculation date
+    worksheet.write(row,column,'Data Through:')
+    worksheet.write(row,column+1,str(calcDate.date()))
+    row = row + 1
+
+    # Widen the first column to make the text clearer.
+    # worksheet.set_column('A:A', 20)
+
+    # Add a bold format to use to highlight cells.
+    # bold = workbook.add_format({'bold': True})
+
+    # for each stock, calculate values and write to workbook
+    headers = ['Ticker','YTD Perf','1 Month Perf','3 Month Perf','6 Month Perf','12 Month Perf',
+               '3 Year Avg','Momentum','Relative Risk', 'SMI Rel. Risk',
+               'Alpha', 'Beta', '3 Year Sharpe Ratio','Expense Ratio', 'Category']
+
+    for item in headers:
+        worksheet.write(row,column,item)
+        column = column + 1
+
+    row = row + 1
+
+
+    #%% Get the data for the control
+    controlTicker = 'VFINX'
+#    controlData = web.DataReader(controlTicker, 'yahoo', year_3, calcDate)
+#    import pdb; pdb.set_trace()
+
+    controlData = yf.download(controlTicker, year_3, calcDate)
+
+    #%% Performance
+
+    tickerIndex = 0
+    toc = []
+
+    for line in tickers:
+
+        tic = time.time()
+
+        allData = line.split('\t')
+        stockTicker = allData[0]
+        category = allData[1]
+
+        tickerIndex = tickerIndex + 1
+
+        if tickerIndex < 5:
+            print stockTicker, ' % Done: ', round(float(tickerIndex)/float(len(tickers))*100,2)
+        else:
+            # Calculate ETA based on the last 4 times
+            ETA_seconds = (toc[-1] + toc[-2] + toc[-3] + toc[-4])/4 * (len(tickers) - tickerIndex)
+            #ETA = str(datetime.timedelta(numpy.round(ETA_seconds,3)))
+            m, s = divmod(numpy.round(ETA_seconds,3), 60)
+            h, m = divmod(m, 60)
+            ETA = str("%d:%02d:%02d" % (h, m, s))
+            print stockTicker, ' % Done: ', round(float(tickerIndex)/float(len(tickers))*100,2), 'ETA: ',  ETA
+
+        try:
+
+            # Get some data from Yahoo Finance
+            #f=web.DataReader("F", 'yahoo', start, end)
+            #stockData = web.DataReader(stockTicker, 'yahoo', year_3, calcDate)
+            try:
+               stockData = yf.download(stockTicker, start=year_3, end=calcDate)
+            except:
+#               extype, value, tb = sys.exc_info()
+#               traceback.print_exc()
+#               pdb.post_mortem(tb)
+
+               if stockData == None:
+                   print 'yahoo did not return any data for ' + stockTicker
+
+               continue
+            stockDates = stockData.index
+            closeCurrDay = stockData.ix[stockDates[-1]]['Adj Close']
+
+            ## get Year to Date performance
+            closestDate = min(stockDates,key=lambda date : abs(first_day-date))
+            closeFirstDay = stockData.ix[closestDate]['Adj Close']
+            perf_YTD =  (closeCurrDay - closeFirstDay)/closeFirstDay*100
+
+            # Find closest day 1 month ago and calculate performance
+            closestDate = min(stockDates,key=lambda date : abs(month_1-date))
+            closeValue_month_1 = stockData.ix[closestDate]['Adj Close']
+            perf_1_month =  (closeCurrDay - closeValue_month_1)/closeValue_month_1*100
+
+            # Find closest day 3 months ago and calculate performance
+            closestDate = min(stockDates,key=lambda date : abs(month_3-date))
+            closeValue_month_3 = stockData.ix[closestDate]['Adj Close']
+            perf_3_month =  (closeCurrDay - closeValue_month_3)/closeValue_month_3*100
+            # Find closest day 6 months ago and calculate performance
+            closestDate = min(stockDates,key=lambda date : abs(month_6-date))
+            closeValue_month_6 = stockData.ix[closestDate]['Adj Close']
+            perf_6_month =  (closeCurrDay - closeValue_month_6)/closeValue_month_6*100
+            # Find closest day 12 months ago and calculate performance
+            closestDate = min(stockDates,key=lambda date : abs(month_12-date))
+            closeValue_month_12 = stockData.ix[closestDate]['Adj Close']
+            perf_12_month =  (closeCurrDay - closeValue_month_12)/closeValue_month_12*100
+
+            # Find closest day 36 months ago and calculate performance
+            closestDate = min(stockDates,key=lambda date : abs(year_3-date))
+            closeValue_month_36 = stockData.ix[closestDate]['Adj Close']
+            perf_36_month =  (closeCurrDay - closeValue_month_36)/closeValue_month_36*100
+            threeYearAve = perf_36_month/3
+
+            #%% Momentum
+            momentumScore = perf_3_month + perf_6_month + perf_12_month
+
+            #%% Calculate the actual normalized STDev
+
+            stockSTD = numpy.std(stockData['Adj Close'])/numpy.mean(stockData['Adj Close'])
+            controlSTD = numpy.std(controlData['Adj Close'])/numpy.mean(controlData['Adj Close'])
+            relativeRisk = (stockSTD)/(controlSTD)
+
+            sharpeRatio = numpy.sqrt(250) * numpy.mean(stockData['Adj Close']) / numpy.std(stockData['Adj Close'])
+
+            ##################
+#            import pdb; pdb.set_trace()
+
+            try:
+                #%% Calculate the stock people's STDev using stockSTD/categorySTD
+                riskURL = "https://finance.yahoo.com/quote/{}/risk".format(stockTicker)
+
+                #riskURL = "http://finance.yahoo.com/q/rk?s={}+Risk".format(stockTicker)
+#                rawHTML = requests.get(riskURL)
+#                soup = BeautifulSoup(rawHTML.content,"html.parser")
+                page = urllib.urlopen(riskURL)
+                content = page.read().decode('utf-8')
+                soup = BeautifulSoup(content, 'html.parser')
+
+                # Relative Risk
+ #              g_data = soup.find("table", {"class": "yfnc_tableout1"})
+ #              stdevWordTD = g_data.find('td',text='Standard Deviation')
+ #              stdevValueTD = stdevWordTD.findNext('td')
+ #              stdevCatTD = stdevValueTD.findNext('td')
+#                stdevValue = float(stdevValueTD.text)
+                std_span = next(x for x in soup.find_all('span') if x.text == "Standard Deviation")
+                parent_div = std_span.parent
+                std=[]
+                for sibling in parent_div.next_siblings:
+                  for child in sibling.children:
+                     # do something
+                     #print(child.text)
+                     std.append((child.text).encode("utf-8"))
+                
+                stdevValue = float(std[0])
+                #stdevValue = float(soup.find("span",{"data-reactid":"121"}).text)
+#               stdevCat = float(stdevCatTD.text)
+                #stdevCat = float(soup.find("span",{"data-reactid":"122"}).text)
+                stdevCat = float(std[1])
+                SmiRelRisk = numpy.float64(stdevValue/stdevCat)
+
+                # Alpha
+#               alphaWordTD = g_data.find('td',text='Alpha (against Standard Index)')
+#               alphaValueTD = alphaWordTD.findNext('td')
+#               alphaValue = float(alphaValueTD.text)
+
+                alpha=[]
+                alpha_span = next(x for x in soup.find_all('span') if x.text == "Alpha")
+                parent_div = alpha_span.parent
+                for sibling in parent_div.next_siblings:
+                  for child in sibling.children:
+                     # do something
+                     #print(child.text)
+                     alpha.append((child.text).encode("utf-8"))
+
+#                alphaValue = float(soup.find("span",{"data-reactid":"64","class":"W(39%) Fl(start)"}).text)
+                alphaValue = float(alpha[0])
+                # Beta
+#                betaWordTD = g_data.find('td',text='Beta (against Standard Index)')
+#                betaValueTD = betaWordTD.findNext('td')
+#                betaValue = float(betaValueTD.text)
+                beta=[]
+                beta_span = next(x for x in soup.find_all('span') if x.text == "Beta")
+                parent_div = beta_span.parent
+                for sibling in parent_div.next_siblings:
+                  for child in sibling.children:
+                     # do something
+                     #print(child.text)
+                     beta.append((child.text).encode("utf-8"))
+
+                betaValue = float(beta[0])
+#                betaValue = float(soup.find("span",{"data-reactid":"79","class":"W(39%) Fl(start)"}).text)
+#                import pdb; pdb.set_trace() 
+
+            except:
+                SmiRelRisk = 'N/A'
+                alphaValue = 'N/A'
+                betaValue = 'N/A'
+
+            #################
+
+            try:
+                expenseRatioURL = 'http://finance.yahoo.com/q/pr?s={}+Profile'.format(stockTicker)
+                rawHTML = requests.get(expenseRatioURL)
+                soup = BeautifulSoup(rawHTML.content,"html.parser")
+
+                g_data = soup.findAll("table", {"class": "yfnc_datamodoutline1"})
+
+                # http://stackoverflow.com/questions/29501426/beautifulsoup-retrieve-specific-value-in-table
+                expenseRatio = soup.find(text="Annual Report Expense Ratio (net):").parent.next_sibling.string
+
+            except:
+                expenseRatio = 'N/A'
+
+            #%% put everything into data
+
+            data = [stockTicker, perf_YTD, perf_1_month, perf_3_month, perf_6_month, perf_12_month,
+                    threeYearAve, momentumScore, relativeRisk, SmiRelRisk,
+                    alphaValue, betaValue, sharpeRatio, expenseRatio, category]
+
+            col = 0
+
+            for item in data:
+                if type(item) is numpy.float64:
+                    worksheet.write(row, col, numpy.round(item,3))
+                else:
+                    worksheet.write(row, col, item)
+
+                col = col + 1
+
+            row = row + 1
+
+            # add the last calcuation time onto toc
+            toc.append(time.time() - tic)
+
+        except:
+            print 'Can not find ' ,stockTicker
+
+
+
+    # end of ticker for loop
+
+
+    # turn on autofilters:
+    worksheet.autofilter(str('A2:' + chr(len(headers)-1 + ord('A')) + str(len(tickers)+1)))
+
+    # Freeze first two rows
+    worksheet.freeze_panes(2, 0)
+
+    #%% finally, close the workbook
+    workbook.close()
+
+    print 'done!'
+
+    # send an email to select reciplents
+    if args.sendEmail:
+        mail("xxx@gmail.com",
+        "Hello from stockMachine!",
+        "Attached is today's stockMachine output:",
+        workbookName)
+        print 'emailed to Jeremy'
+
+    # only send these on Friday
+    if datetime.datetime.today().weekday() == 4:
+
+        mail("xxx@gmail.com",
+        "Hello from stockMachine!",
+        "Attached is today's stockMachine output:",
+        workbookName)
+        print 'emailed to Seth'
+
+        mail("xxx@gmail.com",
+        "Hello from stockMachine!",
+        "Attached is today's stockMachine output:",
+        workbookName)
+        print 'emailed to Dad'
+
+
+def mail(to, subject, text, attach):
+
+    gmail_user = "xxx@gmail.com"
+    gmail_pwd = 'password'
+
+    msg = MIMEMultipart()
+
+    msg['From'] = gmail_user
+    msg['To'] = to
+    msg['Subject'] = subject
+
+    msg.attach(MIMEText(text))
+
+    part = MIMEBase('application', 'octet-stream')
+    part.set_payload(open(attach, 'rb').read())
+    Encoders.encode_base64(part)
+    part.add_header('Content-Disposition',
+            'attachment; filename="%s"' % os.path.basename(attach))
+    msg.attach(part)
+
+    #mailServer = smtplib.SMTP_SSL("smtp.gmail.com", 465)
+    mailServer = smtplib.SMTP("smtp.gmail.com", 587)
+    mailServer.ehlo()
+    mailServer.starttls()
+    mailServer.ehlo()
+    mailServer.login(gmail_user, gmail_pwd)
+    mailServer.sendmail(gmail_user, to, msg.as_string())
+    # Should be mailServer.quit(), but that crashes...
+    mailServer.close()
+
+
+if __name__ == "__main__":
+    stockMachine()
