@@ -27,29 +27,29 @@ def calcMomentum(stockTicker,startDate,totalDays):
    
    
       stockDates = stockData.index
-      closeCurrDay = stockData.ix[stockDates[-1]]['Adj Close']
+      closeCurrDay = stockData.loc[stockDates[-1]]['Adj Close']
    
       ## get Year to Date performance
       closestDate = min(stockDates,key=lambda date : abs(first_day-date))
-      closeFirstDay = stockData.ix[closestDate]['Adj Close']
+      closeFirstDay = stockData.loc[closestDate]['Adj Close']
       perf_YTD =  (closeCurrDay - closeFirstDay)/closeFirstDay*100
    
       # Find closest day 1 month ago and calculate performance
       closestDate = min(stockDates,key=lambda date : abs(month_1-date))
-      closeValue_month_1 = stockData.ix[closestDate]['Adj Close']
+      closeValue_month_1 = stockData.loc[closestDate]['Adj Close']
       perf_1_month =  (closeCurrDay - closeValue_month_1)/closeValue_month_1*100
    
       # Find closest day 3 months ago and calculate performance
       closestDate = min(stockDates,key=lambda date : abs(month_3-date))
-      closeValue_month_3 = stockData.ix[closestDate]['Adj Close']
+      closeValue_month_3 = stockData.loc[closestDate]['Adj Close']
       perf_3_month =  (closeCurrDay - closeValue_month_3)/closeValue_month_3*100
       # Find closest day 6 months ago and calculate performance
       closestDate = min(stockDates,key=lambda date : abs(month_6-date))
-      closeValue_month_6 = stockData.ix[closestDate]['Adj Close']
+      closeValue_month_6 = stockData.loc[closestDate]['Adj Close']
       perf_6_month =  (closeCurrDay - closeValue_month_6)/closeValue_month_6*100
       # Find closest day 12 months ago and calculate performance
       closestDate = min(stockDates,key=lambda date : abs(month_12-date))
-      closeValue_month_12 = stockData.ix[closestDate]['Adj Close']
+      closeValue_month_12 = stockData.loc[closestDate]['Adj Close']
       perf_12_month =  (closeCurrDay - closeValue_month_12)/closeValue_month_12*100
    
       momentumScore[n] = perf_1_month + perf_3_month + perf_6_month + perf_12_month
